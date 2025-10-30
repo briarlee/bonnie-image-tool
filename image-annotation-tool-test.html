@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片尺寸标注工具</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            font-size: 18px;
+            font-family: 'Georgia', serif;
+            font-style: italic;
+            color: #FFE5B4;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+            letter-spacing: 2px;
+            margin-top: 8px;
+            font-weight: 600;
+        }
+
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 0;
+            min-height: 600px;
+        }
+
+        .sidebar {
+            background: #f8f9fa;
+            padding: 30px;
+            border-right: 1px solid #e0e0e0;
+        }
+
+        .canvas-area {
+            padding: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: #fafafa;
+        }
+
+        .upload-zone {
+            border: 3px dashed #667eea;
+            border-radius: 12px;
+            padding: 60px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            background: white;
+            width: 100%;
+            max-width: 500px;
+        }
+
+        .upload-zone:hover {
+            border-color: #764ba2;
+            background: #f0f4ff;
+            transform: translateY(-2px);
+        }
+
+        .upload-zone.dragover {
+            border-color: #764ba2;
+            background: #e8ecff;
+        }
+
+        .upload-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+
+        #canvas {
+            max-width: 100%;
+            max-height: 70vh;
+            cursor: crosshair;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            background: white;
+            border-radius: 8px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 600;
+            margin: 5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .control-group {
+            margin-bottom: 25px;
+        }
+
+        .control-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+
+        .control-group input,
+        .control-group select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border 0.3s;
+        }
+
+        .control-group input:focus,
+        .control-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .annotation-list {
+            margin-top: 20px;
+        }
+
+        .annotation-item {
+            background: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+            font-size: 13px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .annotation-item button {
+            padding: 4px 8px;
+            font-size: 12px;
+        }
+
+        .button-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .instructions {
+            background: #e8ecff;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .instructions h3 {
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+
+        .instructions ol {
+            margin-left: 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+        }
+
+        #fileInput {
+            display: none;
+        }
+
+        .color-picker-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .color-preset {
+            width: 32px;
+            height: 32px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .color-preset:hover {
+            transform: scale(1.1);
+            border-color: #667eea;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        @media (max-width: 968px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                border-right: none;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* 模态输入框样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+            max-width: 400px;
+            width: 90%;
+        }
+
+        .modal-content h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .modal-content input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            font-size: 16px;
+            margin-bottom: 20px;
+        }
+
+        .modal-content input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+    </style>
+</head>
+<body>
+    <!-- 模态输入框 -->
+    <div id="labelModal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3>📏 输入尺寸标注</h3>
+            <input type="text" id="labelInput" placeholder="例如：120cm 或 1.5m" />
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="cancelLabel()">取消</button>
+                <button class="btn btn-primary" onclick="confirmLabel()">确定</button>
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <div class="header">
+            <h1>📐 图片尺寸标注工具</h1>
+            <div class="subtitle">✨ B组 Bonnie 专用 ✨</div>
+            <p>轻松为您的产品图片添加专业的尺寸标注</p>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar">
+                <div class="instructions">
+                    <h3>使用说明</h3>
+                    <ol>
+                        <li>上传或拖拽图片</li>
+                        <li>点击图片两个点标记尺寸</li>
+                        <li>输入尺寸信息</li>
+                        <li>调整样式（可选）</li>
+                        <li>下载标注后的图片</li>
+                    </ol>
+                </div>
+
+                <div class="control-group">
+                    <label>线条颜色</label>
+                    <input type="color" id="lineColor" value="#FF9AA2">
+                    <div style="display: flex; gap: 5px; margin-top: 10px; flex-wrap: wrap;">
+                        <button class="color-preset" style="background: #FF9AA2;" onclick="setColor('#FF9AA2')" title="马卡龙粉"></button>
+                        <button class="color-preset" style="background: #FFB7B2;" onclick="setColor('#FFB7B2')" title="珊瑚粉"></button>
+                        <button class="color-preset" style="background: #FFDAC1;" onclick="setColor('#FFDAC1')" title="杏仁黄"></button>
+                        <button class="color-preset" style="background: #B5EAD7;" onclick="setColor('#B5EAD7')" title="薄荷绿"></button>
+                        <button class="color-preset" style="background: #C7CEEA;" onclick="setColor('#C7CEEA')" title="薰衣草紫"></button>
+                        <button class="color-preset" style="background: #A0C4FF;" onclick="setColor('#A0C4FF')" title="天空蓝"></button>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>端点样式</label>
+                    <select id="endpointStyle">
+                        <option value="circle">● 圆点</option>
+                        <option value="arrow">➤ 箭头</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>线条粗细</label>
+                    <input type="range" id="lineWidth" min="2" max="8" value="4">
+                    <span id="lineWidthValue">4px</span>
+                </div>
+
+                <div class="control-group">
+                    <label>字体大小</label>
+                    <input type="range" id="fontSize" min="16" max="42" value="28">
+                    <span id="fontSizeValue">28px</span>
+                </div>
+
+                <div class="control-group">
+                    <label>文字颜色</label>
+                    <input type="color" id="textColor" value="#FF9AA2">
+                </div>
+
+                <div class="annotation-list" id="annotationList">
+                    <h3 style="margin-bottom: 10px;">标注列表</h3>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn btn-danger" id="clearAllBtn" onclick="clearAll()">清除所有</button>
+                    <button class="btn btn-secondary" id="undoBtn" onclick="undoLast()">撤销上一个</button>
+                </div>
+            </div>
+
+            <div class="canvas-area">
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-icon">📸</div>
+                    <h2>点击或拖拽上传图片</h2>
+                    <p style="color: #666; margin-top: 10px;">支持 JPG、PNG、GIF 格式</p>
+                    <input type="file" id="fileInput" accept="image/*">
+                </div>
+
+                <canvas id="canvas" class="hidden"></canvas>
+
+                <div class="button-group hidden" id="actionButtons">
+                    <button class="btn btn-success" onclick="downloadImage()">💾 下载标注图片</button>
+                    <button class="btn btn-secondary" onclick="resetImage()">🔄 重新上传</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const uploadZone = document.getElementById('uploadZone');
+        const fileInput = document.getElementById('fileInput');
+        const actionButtons = document.getElementById('actionButtons');
+        const annotationList = document.getElementById('annotationList');
+        const labelModal = document.getElementById('labelModal');
+        const labelInput = document.getElementById('labelInput');
+
+        let originalImage = null;
+        let annotations = [];
+        let currentPoints = [];
+        let isDrawingMode = false;
+
+        // 样式控制
+        const lineColorInput = document.getElementById('lineColor');
+        const lineWidthInput = document.getElementById('lineWidth');
+        const fontSizeInput = document.getElementById('fontSize');
+        const textColorInput = document.getElementById('textColor');
+        const endpointStyleInput = document.getElementById('endpointStyle');
+
+        // 显示模态框
+        function showLabelModal() {
+            labelModal.classList.remove('hidden');
+            labelInput.value = '';
+            labelInput.focus();
+        }
+
+        // 隐藏模态框
+        function hideLabelModal() {
+            labelModal.classList.add('hidden');
+        }
+
+        // 确认标注
+        function confirmLabel() {
+            const label = labelInput.value.trim();
+            
+            if (label) {
+                annotations.push({
+                    start: currentPoints[0],
+                    end: currentPoints[1],
+                    label: label,
+                    color: lineColorInput.value,
+                    lineWidth: parseInt(lineWidthInput.value),
+                    fontSize: parseInt(fontSizeInput.value),
+                    textColor: textColorInput.value,
+                    endpointStyle: endpointStyleInput.value
+                });
+                updateAnnotationList();
+            }
+            
+            currentPoints = [];
+            hideLabelModal();
+            redrawCanvas();
+        }
+
+        // 取消标注
+        function cancelLabel() {
+            currentPoints = [];
+            hideLabelModal();
+            redrawCanvas();
+        }
+
+        // 回车键确认
+        labelInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                confirmLabel();
+            }
+        });
+
+        // ESC键取消
+        labelModal.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                cancelLabel();
+            }
+        });
+
+        // 点击背景关闭
+        labelModal.addEventListener('click', (e) => {
+            if (e.target === labelModal) {
+                cancelLabel();
+            }
+        });
+
+        // 设置颜色（用于颜色预设按钮）
+        function setColor(color) {
+            lineColorInput.value = color;
+            textColorInput.value = color;
+            redrawCanvas();
+        }
+
+        // 更新显示值
+        lineWidthInput.addEventListener('input', (e) => {
+            document.getElementById('lineWidthValue').textContent = e.target.value + 'px';
+            redrawCanvas();
+        });
+
+        fontSizeInput.addEventListener('input', (e) => {
+            document.getElementById('fontSizeValue').textContent = e.target.value + 'px';
+            redrawCanvas();
+        });
+
+        lineColorInput.addEventListener('change', redrawCanvas);
+        textColorInput.addEventListener('change', redrawCanvas);
+        endpointStyleInput.addEventListener('change', redrawCanvas);
+
+        // 上传区域点击
+        uploadZone.addEventListener('click', () => fileInput.click());
+
+        // 文件选择
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) loadImage(file);
+        });
+
+        // 拖拽上传
+        uploadZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadZone.classList.add('dragover');
+        });
+
+        uploadZone.addEventListener('dragleave', () => {
+            uploadZone.classList.remove('dragover');
+        });
+
+        uploadZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                loadImage(file);
+            }
+        });
+
+        // 加载图片
+        function loadImage(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    originalImage = img;
+                    setupCanvas(img);
+                    uploadZone.classList.add('hidden');
+                    canvas.classList.remove('hidden');
+                    actionButtons.classList.remove('hidden');
+                    isDrawingMode = true;
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        // 设置画布
+        function setupCanvas(img) {
+            const maxWidth = 1000;
+            const maxHeight = 700;
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height = (maxWidth / width) * height;
+                width = maxWidth;
+            }
+            if (height > maxHeight) {
+                width = (maxHeight / height) * width;
+                height = maxHeight;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            redrawCanvas();
+        }
+
+        // 重绘画布
+        function redrawCanvas() {
+            if (!originalImage) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.drawImage(originalImage, 0, 0, canvas.width, canvas.height);
+
+            // 绘制所有标注
+            annotations.forEach(annotation => {
+                drawAnnotation(annotation);
+            });
+
+            // 绘制当前正在标注的点
+            if (currentPoints.length === 1) {
+                ctx.fillStyle = lineColorInput.value;
+                ctx.beginPath();
+                ctx.arc(currentPoints[0].x, currentPoints[0].y, 5, 0, 2 * Math.PI);
+                ctx.fill();
+            } else if (currentPoints.length === 2) {
+                // 绘制临时的两个点和连线
+                ctx.strokeStyle = lineColorInput.value;
+                ctx.lineWidth = parseInt(lineWidthInput.value);
+                
+                // 计算角度
+                const angle = Math.atan2(
+                    currentPoints[1].y - currentPoints[0].y,
+                    currentPoints[1].x - currentPoints[0].x
+                );
+                
+                // 绘制连线
+                ctx.beginPath();
+                ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
+                ctx.lineTo(currentPoints[1].x, currentPoints[1].y);
+                ctx.stroke();
+                
+                // 根据当前选择的样式绘制端点
+                ctx.fillStyle = lineColorInput.value;
+                const currentStyle = endpointStyleInput.value;
+                
+                if (currentStyle === 'arrow') {
+                    const arrowSize = parseInt(lineWidthInput.value) * 3 + 8;
+                    drawArrow(currentPoints[0].x, currentPoints[0].y, angle + Math.PI, arrowSize, lineColorInput.value);
+                    drawArrow(currentPoints[1].x, currentPoints[1].y, angle, arrowSize, lineColorInput.value);
+                } else {
+                    currentPoints.forEach(point => {
+                        ctx.beginPath();
+                        ctx.arc(point.x, point.y, parseInt(lineWidthInput.value) + 2, 0, 2 * Math.PI);
+                        ctx.fill();
+                    });
+                }
+            }
+        }
+
+        // 绘制单个标注
+        function drawAnnotation(annotation) {
+            const { start, end, label, color, lineWidth, fontSize, textColor, endpointStyle } = annotation;
+
+            ctx.strokeStyle = color;
+            ctx.lineWidth = lineWidth;
+            ctx.fillStyle = textColor;
+
+            // 计算线条角度
+            const angle = Math.atan2(end.y - start.y, end.x - start.x);
+            const length = Math.sqrt((end.x - start.x) ** 2 + (end.y - start.y) ** 2);
+
+            // 绘制线条
+            ctx.beginPath();
+            ctx.moveTo(start.x, start.y);
+            ctx.lineTo(end.x, end.y);
+            ctx.stroke();
+
+            // 绘制端点
+            ctx.fillStyle = color;
+            
+            if (endpointStyle === 'arrow') {
+                // 绘制箭头
+                const arrowSize = lineWidth * 3 + 8;
+                
+                // 起点箭头
+                drawArrow(start.x, start.y, angle + Math.PI, arrowSize, color);
+                
+                // 终点箭头
+                drawArrow(end.x, end.y, angle, arrowSize, color);
+            } else {
+                // 绘制圆点（默认）
+                [start, end].forEach(point => {
+                    ctx.beginPath();
+                    ctx.arc(point.x, point.y, lineWidth + 2, 0, 2 * Math.PI);
+                    ctx.fill();
+                });
+            }
+
+            // 绘制标签 - 智能定位在线条外侧
+            if (label) {
+                const midX = (start.x + end.x) / 2;
+                const midY = (start.y + end.y) / 2;
+                
+                // 计算文字偏移距离（缩短距离）
+                const offsetDistance = fontSize * 0.5 + 8;
+                
+                // 计算垂直于线条的方向（线条外侧）
+                // 使用法向量：将线条方向旋转90度
+                const perpAngle = angle + Math.PI / 2;
+                
+                // 智能判断文字应该在线条的哪一侧
+                // 优先放在图片下方和右侧（调整到另一侧）
+                let textOffsetMultiplier = 1; // 默认在线条下方/右侧
+                
+                // 如果线条在图片下半部分且接近水平，放在上方
+                if (midY > canvas.height * 0.7 && Math.abs(Math.cos(angle)) > 0.5) {
+                    textOffsetMultiplier = -1;
+                }
+                
+                // 如果线条在图片右侧且接近垂直，放在左侧
+                if (midX > canvas.width * 0.7 && Math.abs(Math.sin(angle)) > 0.5) {
+                    textOffsetMultiplier = -1;
+                }
+                
+                // 计算文字位置（在线条的垂直方向上偏移）
+                const textX = midX + Math.cos(perpAngle) * offsetDistance * textOffsetMultiplier;
+                const textY = midY + Math.sin(perpAngle) * offsetDistance * textOffsetMultiplier;
+
+                ctx.font = `bold ${fontSize}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                // 添加文字阴影效果
+                ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+                ctx.shadowBlur = 8;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+                
+                // 绘制文字描边（白色），让文字更清晰
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.lineWidth = 6;
+                ctx.strokeText(label, textX, textY);
+                
+                // 绘制实际文字
+                ctx.fillStyle = textColor;
+                ctx.fillText(label, textX, textY);
+                
+                // 重置阴影
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        // 绘制箭头的辅助函数
+        function drawArrow(x, y, angle, size, color) {
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+            
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(-size, size / 2);
+            ctx.lineTo(-size, -size / 2);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.restore();
+        }
+
+        // 画布点击事件
+        canvas.addEventListener('click', (e) => {
+            if (!isDrawingMode) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            // 调整坐标比例
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            const adjustedX = x * scaleX;
+            const adjustedY = y * scaleY;
+
+            currentPoints.push({ x: adjustedX, y: adjustedY });
+
+            if (currentPoints.length === 1) {
+                // 第一个点已标记
+                redrawCanvas();
+            } else if (currentPoints.length === 2) {
+                // 显示两个点和连线
+                redrawCanvas();
+                // 显示输入框
+                showLabelModal();
+            }
+        });
+
+        // 更新标注列表
+        function updateAnnotationList() {
+            const listContainer = annotationList.querySelector('h3').nextElementSibling || annotationList;
+            
+            // 清空现有列表（除了标题）
+            while (annotationList.children.length > 1) {
+                annotationList.removeChild(annotationList.lastChild);
+            }
+
+            annotations.forEach((annotation, index) => {
+                const item = document.createElement('div');
+                item.className = 'annotation-item';
+                item.innerHTML = `
+                    <span>${annotation.label}</span>
+                    <button class="btn btn-danger" onclick="deleteAnnotation(${index})">删除</button>
+                `;
+                annotationList.appendChild(item);
+            });
+        }
+
+        // 删除标注
+        function deleteAnnotation(index) {
+            annotations.splice(index, 1);
+            updateAnnotationList();
+            redrawCanvas();
+        }
+
+        // 撤销上一个
+        function undoLast() {
+            if (annotations.length > 0) {
+                annotations.pop();
+                updateAnnotationList();
+                redrawCanvas();
+            }
+        }
+
+        // 清除所有
+        function clearAll() {
+            if (confirm('确定要清除所有标注吗？')) {
+                annotations = [];
+                currentPoints = [];
+                updateAnnotationList();
+                redrawCanvas();
+            }
+        }
+
+        // 下载图片
+        function downloadImage() {
+            try {
+                // 创建下载链接
+                const link = document.createElement('a');
+                const timestamp = new Date().getTime();
+                link.download = `标注图片_${timestamp}.png`;
+                
+                // 将canvas转换为blob
+                canvas.toBlob((blob) => {
+                    if (blob) {
+                        const url = URL.createObjectURL(blob);
+                        link.href = url;
+                        
+                        // 添加到DOM，点击，然后移除
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                        
+                        // 释放URL对象
+                        setTimeout(() => URL.revokeObjectURL(url), 100);
+                        
+                        alert('✅ 图片下载成功！请查看您的下载文件夹');
+                    } else {
+                        throw new Error('无法生成图片');
+                    }
+                }, 'image/png', 1.0);
+            } catch (error) {
+                console.error('下载失败：', error);
+                alert('❌ 下载失败，请重试或截图保存');
+            }
+        }
+
+        // 重新上传
+        function resetImage() {
+            if (confirm('确定要重新上传图片吗？当前的标注将会丢失。')) {
+                originalImage = null;
+                annotations = [];
+                currentPoints = [];
+                canvas.classList.add('hidden');
+                actionButtons.classList.add('hidden');
+                uploadZone.classList.remove('hidden');
+                hideLabelModal();
+                updateAnnotationList();
+            }
+        }
+    </script>
+</body>
+</html>
