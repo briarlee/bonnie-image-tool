@@ -75,6 +75,38 @@
             align-items: center;
             justify-content: center;
             background: #fafafa;
+            overflow: auto; /* 允许滚动 */
+            position: relative;
+        }
+
+        .canvas-wrapper {
+            display: inline-block;
+            max-width: calc(100% - 20px);
+            max-height: 70vh;
+            overflow: auto;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            margin: 10px;
+        }
+
+        .canvas-wrapper::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .canvas-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .canvas-wrapper::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .canvas-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #555;
         }
 
         .upload-zone {
@@ -106,12 +138,10 @@
         }
 
         #canvas {
-            max-width: 100%;
-            max-height: 70vh;
+            display: block;
             cursor: crosshair;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
             background: white;
-            border-radius: 8px;
+            transition: transform 0.2s ease;
         }
 
         .btn {
@@ -268,6 +298,35 @@
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
         }
 
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 15px;
+            justify-content: center;
+        }
+
+        .zoom-controls button {
+            padding: 8px 12px;
+            min-width: 40px;
+        }
+
+        #zoomLevel {
+            font-weight: 600;
+            min-width: 50px;
+            text-align: center;
+        }
+
+        .keyboard-hints {
+            background: #e8ecff;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 13px;
+            text-align: center;
+            color: #667eea;
+        }
+
         @media (max-width: 968px) {
             .main-content {
                 grid-template-columns: 1fr;
@@ -359,9 +418,17 @@
                         <li>上传或拖拽图片</li>
                         <li>点击图片两个点标记尺寸</li>
                         <li>输入尺寸信息</li>
-                        <li>调整样式（可选）</li>
+                        <li>拖动端点可调整位置</li>
+                        <li>双击文字可编辑内容</li>
                         <li>下载标注后的图片</li>
                     </ol>
+                    <div style="margin-top: 10px; padding: 8px; background: #fff3cd; border-radius: 4px; font-size: 12px;">
+                        <strong>快捷键：</strong><br>
+                        Ctrl+Z: 撤销<br>
+                        Ctrl+S: 下载<br>
+                        +/-: 缩放<br>
+                        ESC: 取消
+                    </div>
                 </div>
 
                 <div class="control-group">
@@ -402,6 +469,18 @@
                     <input type="color" id="textColor" value="#FF9AA2">
                 </div>
 
+                <div class="control-group">
+                    <label>双单位显示</label>
+                    <label style="display: flex; align-items: center; gap: 8px; margin-top: 8px;">
+                        <input type="checkbox" id="dualUnit" style="width: auto;">
+                        <span>启用双单位显示</span>
+                    </label>
+                    <p style="font-size: 11px; color: #666; margin: 8px 0 0 0;">
+                        自动换算：cm ↔ inch<br>
+                        示例：120cm (47.2")
+                    </p>
+                </div>
+
                 <div class="annotation-list" id="annotationList">
                     <h3 style="margin-bottom: 10px;">标注列表</h3>
                 </div>
@@ -420,7 +499,20 @@
                     <input type="file" id="fileInput" accept="image/*">
                 </div>
 
-                <canvas id="canvas" class="hidden"></canvas>
+                <div class="canvas-wrapper hidden" id="canvasWrapper">
+                    <canvas id="canvas"></canvas>
+                </div>
+
+                <div class="zoom-controls hidden" id="zoomControls">
+                    <button class="btn btn-secondary" onclick="zoomCanvas(0.8)" title="缩小">🔍-</button>
+                    <span id="zoomLevel">100%</span>
+                    <button class="btn btn-secondary" onclick="zoomCanvas(1.2)" title="放大">🔍+</button>
+                    <button class="btn btn-secondary" onclick="resetZoom()" title="重置">↺</button>
+                </div>
+
+                <div class="keyboard-hints hidden" id="keyboardHints">
+                    💡 快捷键：Ctrl+Z 撤销 | Delete 删除 | Ctrl+S 保存 | +/- 缩放 | ESC 取消
+                </div>
 
                 <div class="button-group hidden" id="actionButtons">
                     <button class="btn btn-success" onclick="downloadImage()">💾 下载标注图片</button>
@@ -439,11 +531,18 @@
         const annotationList = document.getElementById('annotationList');
         const labelModal = document.getElementById('labelModal');
         const labelInput = document.getElementById('labelInput');
+        const canvasWrapper = document.getElementById('canvasWrapper');
 
         let originalImage = null;
         let annotations = [];
         let currentPoints = [];
         let isDrawingMode = false;
+        let isDragging = false;
+        let dragTarget = null; // {annotationIndex, pointType: 'start' or 'end'}
+        let editingAnnotationIndex = null; // 正在编辑的标注索引
+        let zoomLevel = 1; // 缩放级别
+        let canvasOffsetX = 0;
+        let canvasOffsetY = 0;
 
         // 样式控制
         const lineColorInput = document.getElementById('lineColor');
@@ -451,11 +550,169 @@
         const fontSizeInput = document.getElementById('fontSize');
         const textColorInput = document.getElementById('textColor');
         const endpointStyleInput = document.getElementById('endpointStyle');
+        const dualUnitInput = document.getElementById('dualUnit');
+        const zoomControls = document.getElementById('zoomControls');
+        const keyboardHints = document.getElementById('keyboardHints');
+
+        // 从localStorage恢复设置
+        function loadSettings() {
+            const settings = JSON.parse(localStorage.getItem('annotationSettings') || '{}');
+            if (settings.lineColor) lineColorInput.value = settings.lineColor;
+            if (settings.textColor) textColorInput.value = settings.textColor;
+            if (settings.lineWidth) {
+                lineWidthInput.value = settings.lineWidth;
+                document.getElementById('lineWidthValue').textContent = settings.lineWidth + 'px';
+            }
+            if (settings.fontSize) {
+                fontSizeInput.value = settings.fontSize;
+                document.getElementById('fontSizeValue').textContent = settings.fontSize + 'px';
+            }
+            if (settings.endpointStyle) endpointStyleInput.value = settings.endpointStyle;
+            if (settings.dualUnit !== undefined) dualUnitInput.checked = settings.dualUnit;
+        }
+
+        // 保存设置到localStorage
+        function saveSettings() {
+            const settings = {
+                lineColor: lineColorInput.value,
+                textColor: textColorInput.value,
+                lineWidth: lineWidthInput.value,
+                fontSize: fontSizeInput.value,
+                endpointStyle: endpointStyleInput.value,
+                dualUnit: dualUnitInput.checked
+            };
+            localStorage.setItem('annotationSettings', JSON.stringify(settings));
+        }
+
+        // 页面加载时恢复设置
+        loadSettings();
+
+        // 解析输入的尺寸和单位
+        function parseUnit(input) {
+            // 匹配数字和单位：支持 120cm, 120 cm, 1200mm, 1.2m, 48", 48inch
+            const match = input.trim().match(/([\d.]+)\s*(cm|mm|m|inch|"|feet|')?/i);
+            if (!match) return null;
+            
+            const value = parseFloat(match[1]);
+            let unit = (match[2] || '').toLowerCase();
+            
+            // 标准化单位
+            if (unit === '"') unit = 'inch';
+            if (unit === "'") unit = 'feet';
+            
+            return { value, unit };
+        }
+
+        // 单位转换
+        function convertUnit(value, fromUnit) {
+            const conversions = {
+                'cm': { target: 'inch', symbol: '"', formula: v => v / 2.54 },
+                'mm': { target: 'inch', symbol: '"', formula: v => v / 25.4 },
+                'm': { target: 'feet', symbol: "'", formula: v => v * 3.281 },
+                'inch': { target: 'cm', symbol: 'cm', formula: v => v * 2.54 },
+                'feet': { target: 'm', symbol: 'm', formula: v => v / 3.281 }
+            };
+            
+            if (!fromUnit || !conversions[fromUnit]) {
+                return null;
+            }
+            
+            const conversion = conversions[fromUnit];
+            const convertedValue = conversion.formula(value);
+            
+            return {
+                value: convertedValue,
+                unit: conversion.target,
+                symbol: conversion.symbol
+            };
+        }
+
+        // 格式化为双单位显示
+        function formatDualUnit(input) {
+            if (!dualUnitInput.checked) {
+                return input; // 未启用双单位，返回原文本
+            }
+            
+            const parsed = parseUnit(input);
+            if (!parsed || !parsed.unit) {
+                return input; // 无法解析或没有单位，返回原文本
+            }
+            
+            const converted = convertUnit(parsed.value, parsed.unit);
+            if (!converted) {
+                return input; // 无法转换，返回原文本
+            }
+            
+            // 格式化：120cm (47.2")
+            const originalUnit = parsed.unit === 'inch' ? '"' : (parsed.unit === 'feet' ? "'" : parsed.unit);
+            return `${parsed.value}${originalUnit} (${converted.value.toFixed(1)}${converted.symbol})`;
+        }
+
+        // 更新所有已有标注的双单位显示
+        function updateAllAnnotationsWithDualUnit() {
+            annotations.forEach(annotation => {
+                // 使用原始标签重新格式化
+                const rawLabel = annotation.rawLabel || annotation.label;
+                annotation.label = formatDualUnit(rawLabel);
+                annotation.rawLabel = rawLabel; // 确保保存了原始标签
+            });
+            updateAnnotationList();
+            redrawCanvas();
+        }
+
+        // 缩放画布
+        function zoomCanvas(factor) {
+            zoomLevel *= factor;
+            zoomLevel = Math.max(0.5, Math.min(3, zoomLevel)); // 限制在50%-300%
+            
+            // 使用CSS缩放
+            canvas.style.transform = `scale(${zoomLevel})`;
+            canvas.style.transformOrigin = 'top left';
+            
+            // 调整wrapper大小以适应缩放后的canvas
+            const scaledWidth = canvas.width * zoomLevel;
+            const scaledHeight = canvas.height * zoomLevel;
+            canvasWrapper.style.width = Math.min(scaledWidth, canvasWrapper.parentElement.clientWidth - 60) + 'px';
+            canvasWrapper.style.height = Math.min(scaledHeight, window.innerHeight * 0.7) + 'px';
+            
+            document.getElementById('zoomLevel').textContent = Math.round(zoomLevel * 100) + '%';
+        }
+
+        // 重置缩放
+        function resetZoom() {
+            zoomLevel = 1;
+            canvas.style.transform = 'scale(1)';
+            canvas.style.transformOrigin = 'top left';
+            canvasWrapper.style.width = '';
+            canvasWrapper.style.height = '';
+            document.getElementById('zoomLevel').textContent = '100%';
+        }
+
+        // 获取调整后的鼠标坐标（考虑缩放）
+        function getAdjustedCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            // 考虑canvas的实际尺寸和显示尺寸的比例
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            return {
+                x: x * scaleX,
+                y: y * scaleY
+            };
+        }
 
         // 显示模态框
         function showLabelModal() {
+            const modalTitle = document.querySelector('.modal-content h3');
+            if (editingAnnotationIndex !== null) {
+                modalTitle.textContent = '✏️ 编辑尺寸标注';
+            } else {
+                modalTitle.textContent = '📏 输入尺寸标注';
+            }
             labelModal.classList.remove('hidden');
-            labelInput.value = '';
             labelInput.focus();
         }
 
@@ -469,17 +726,30 @@
             const label = labelInput.value.trim();
             
             if (label) {
-                annotations.push({
-                    start: currentPoints[0],
-                    end: currentPoints[1],
-                    label: label,
-                    color: lineColorInput.value,
-                    lineWidth: parseInt(lineWidthInput.value),
-                    fontSize: parseInt(fontSizeInput.value),
-                    textColor: textColorInput.value,
-                    endpointStyle: endpointStyleInput.value
-                });
+                // 格式化为双单位（如果启用）
+                const formattedLabel = formatDualUnit(label);
+                
+                if (editingAnnotationIndex !== null) {
+                    // 编辑模式：更新现有标注
+                    annotations[editingAnnotationIndex].label = formattedLabel;
+                    annotations[editingAnnotationIndex].rawLabel = label; // 保存原始输入
+                    editingAnnotationIndex = null;
+                } else {
+                    // 新增模式：添加新标注
+                    annotations.push({
+                        start: currentPoints[0],
+                        end: currentPoints[1],
+                        label: formattedLabel,
+                        rawLabel: label, // 保存原始输入，编辑时使用
+                        color: lineColorInput.value,
+                        lineWidth: parseInt(lineWidthInput.value),
+                        fontSize: parseInt(fontSizeInput.value),
+                        textColor: textColorInput.value,
+                        endpointStyle: endpointStyleInput.value
+                    });
+                }
                 updateAnnotationList();
+                saveSettings(); // 保存设置
             }
             
             currentPoints = [];
@@ -490,9 +760,83 @@
         // 取消标注
         function cancelLabel() {
             currentPoints = [];
+            editingAnnotationIndex = null;
             hideLabelModal();
             redrawCanvas();
         }
+
+        // 编辑标注
+        function editAnnotation(index) {
+            editingAnnotationIndex = index;
+            // 显示原始输入，而不是带换算的格式化文本
+            labelInput.value = annotations[index].rawLabel || annotations[index].label;
+            showLabelModal();
+        }
+
+        // 全局快捷键
+        document.addEventListener('keydown', (e) => {
+            // 如果在输入框中，不触发快捷键
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+            
+            // Ctrl/Cmd + Z - 撤销
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                // 优先撤销正在标注的点
+                if (currentPoints.length > 0) {
+                    currentPoints = [];
+                    redrawCanvas();
+                } else if (annotations.length > 0) {
+                    // 如果没有正在标注的点，才删除最后一个完成的标注
+                    undoLast();
+                }
+            }
+            
+            // Ctrl/Cmd + S - 保存/下载
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                if (originalImage) downloadImage();
+            }
+            
+            // Delete/Backspace - 删除最后一个标注
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                e.preventDefault();
+                if (currentPoints.length > 0) {
+                    // 取消正在标注的点
+                    currentPoints = [];
+                    redrawCanvas();
+                } else if (annotations.length > 0) {
+                    if (confirm('删除最后一个标注？')) {
+                        undoLast();
+                    }
+                }
+            }
+            
+            // ESC - 取消当前操作
+            if (e.key === 'Escape') {
+                if (currentPoints.length > 0) {
+                    currentPoints = [];
+                    redrawCanvas();
+                }
+            }
+            
+            // + 放大
+            if (e.key === '+' || e.key === '=') {
+                e.preventDefault();
+                zoomCanvas(1.2);
+            }
+            
+            // - 缩小
+            if (e.key === '-' || e.key === '_') {
+                e.preventDefault();
+                zoomCanvas(0.8);
+            }
+            
+            // 0 重置缩放
+            if (e.key === '0') {
+                e.preventDefault();
+                resetZoom();
+            }
+        });
 
         // 回车键确认
         labelInput.addEventListener('keypress', (e) => {
@@ -533,9 +877,26 @@
             redrawCanvas();
         });
 
-        lineColorInput.addEventListener('change', redrawCanvas);
-        textColorInput.addEventListener('change', redrawCanvas);
-        endpointStyleInput.addEventListener('change', redrawCanvas);
+        lineColorInput.addEventListener('change', () => {
+            saveSettings();
+            redrawCanvas();
+        });
+        textColorInput.addEventListener('change', () => {
+            saveSettings();
+            redrawCanvas();
+        });
+        endpointStyleInput.addEventListener('change', () => {
+            saveSettings();
+            redrawCanvas();
+        });
+        
+        dualUnitInput.addEventListener('change', () => {
+            saveSettings();
+            // 可选：是否更新已有标注
+            if (confirm('是否将双单位设置应用到已有标注？')) {
+                updateAllAnnotationsWithDualUnit();
+            }
+        });
 
         // 上传区域点击
         uploadZone.addEventListener('click', () => fileInput.click());
@@ -574,9 +935,12 @@
                     originalImage = img;
                     setupCanvas(img);
                     uploadZone.classList.add('hidden');
-                    canvas.classList.remove('hidden');
+                    canvasWrapper.classList.remove('hidden');
                     actionButtons.classList.remove('hidden');
+                    zoomControls.classList.remove('hidden');
+                    keyboardHints.classList.remove('hidden');
                     isDrawingMode = true;
+                    resetZoom();
                 };
                 img.src = e.target.result;
             };
@@ -769,30 +1133,216 @@
             ctx.restore();
         }
 
-        // 画布点击事件
-        canvas.addEventListener('click', (e) => {
+        // 检测是否点击在端点附近
+        function getClickedEndpoint(x, y) {
+            const threshold = 20; // 点击检测范围（增大到20px，更容易点击）
+            
+            for (let i = 0; i < annotations.length; i++) {
+                const annotation = annotations[i];
+                
+                // 检测起点
+                const distStart = Math.sqrt(
+                    Math.pow(x - annotation.start.x, 2) + 
+                    Math.pow(y - annotation.start.y, 2)
+                );
+                if (distStart < threshold) {
+                    return { annotationIndex: i, pointType: 'start' };
+                }
+                
+                // 检测终点
+                const distEnd = Math.sqrt(
+                    Math.pow(x - annotation.end.x, 2) + 
+                    Math.pow(y - annotation.end.y, 2)
+                );
+                if (distEnd < threshold) {
+                    return { annotationIndex: i, pointType: 'end' };
+                }
+            }
+            
+            return null;
+        }
+
+        // 检测是否点击在标注文字区域
+        function getClickedAnnotationText(x, y) {
+            for (let i = annotations.length - 1; i >= 0; i--) {
+                const annotation = annotations[i];
+                const midX = (annotation.start.x + annotation.end.x) / 2;
+                const midY = (annotation.start.y + annotation.end.y) / 2;
+                
+                const angle = Math.atan2(
+                    annotation.end.y - annotation.start.y,
+                    annotation.end.x - annotation.start.x
+                );
+                
+                const offsetDistance = annotation.fontSize * 0.5 + 8;
+                const perpAngle = angle + Math.PI / 2;
+                
+                let textOffsetMultiplier = 1;
+                if (midY > canvas.height * 0.7 && Math.abs(Math.cos(angle)) > 0.5) {
+                    textOffsetMultiplier = -1;
+                }
+                if (midX > canvas.width * 0.7 && Math.abs(Math.sin(angle)) > 0.5) {
+                    textOffsetMultiplier = -1;
+                }
+                
+                const textX = midX + Math.cos(perpAngle) * offsetDistance * textOffsetMultiplier;
+                const textY = midY + Math.sin(perpAngle) * offsetDistance * textOffsetMultiplier;
+                
+                // 估算文字区域大小
+                const textWidth = annotation.label.length * annotation.fontSize * 0.6;
+                const textHeight = annotation.fontSize;
+                
+                // 检测点击是否在文字区域内
+                if (Math.abs(x - textX) < textWidth / 2 && Math.abs(y - textY) < textHeight) {
+                    return i;
+                }
+            }
+            return null;
+        }
+
+        // 画布鼠标按下事件
+        canvas.addEventListener('mousedown', (e) => {
             if (!isDrawingMode) return;
 
-            const rect = canvas.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const y = e.clientY - rect.top;
+            const coords = getAdjustedCoords(e);
+            
+            // 检查是否点击了现有标注的端点
+            const endpoint = getClickedEndpoint(coords.x, coords.y);
+            
+            if (endpoint) {
+                // 开始拖动现有端点
+                isDragging = true;
+                dragTarget = endpoint;
+                canvas.style.cursor = 'move';
+            } else if (currentPoints.length < 2) {
+                // 添加新的标注点
+                currentPoints.push({ x: coords.x, y: coords.y });
 
-            // 调整坐标比例
+                if (currentPoints.length === 1) {
+                    redrawCanvas();
+                } else if (currentPoints.length === 2) {
+                    redrawCanvas();
+                    labelInput.value = ''; // 清空输入框
+                    showLabelModal();
+                }
+            }
+        });
+
+        // 画布鼠标移动事件
+        canvas.addEventListener('mousemove', (e) => {
+            if (!isDrawingMode) return;
+
+            const coords = getAdjustedCoords(e);
+
+            if (isDragging && dragTarget) {
+                // 拖动端点
+                const annotation = annotations[dragTarget.annotationIndex];
+                if (dragTarget.pointType === 'start') {
+                    annotation.start.x = coords.x;
+                    annotation.start.y = coords.y;
+                } else {
+                    annotation.end.x = coords.x;
+                    annotation.end.y = coords.y;
+                }
+                redrawCanvas();
+            } else {
+                // 检测鼠标是否悬停在端点上，改变光标样式
+                const endpoint = getClickedEndpoint(coords.x, coords.y);
+                const textIndex = getClickedAnnotationText(coords.x, coords.y);
+                
+                if (endpoint) {
+                    canvas.style.cursor = 'move';
+                } else if (textIndex !== null) {
+                    canvas.style.cursor = 'text';
+                } else {
+                    canvas.style.cursor = 'crosshair';
+                }
+            }
+        });
+
+        // 画布鼠标释放事件
+        canvas.addEventListener('mouseup', (e) => {
+            if (isDragging) {
+                isDragging = false;
+                dragTarget = null;
+                canvas.style.cursor = 'crosshair';
+            }
+        });
+
+        // 鼠标离开画布
+        canvas.addEventListener('mouseleave', (e) => {
+            if (isDragging) {
+                isDragging = false;
+                dragTarget = null;
+                canvas.style.cursor = 'crosshair';
+            }
+        });
+
+        // 双击标注文字编辑
+        canvas.addEventListener('dblclick', (e) => {
+            if (!isDrawingMode) return;
+            
+            const coords = getAdjustedCoords(e);
+            const annotationIndex = getClickedAnnotationText(coords.x, coords.y);
+            
+            if (annotationIndex !== null) {
+                editAnnotation(annotationIndex);
+            }
+        });
+
+        // 触摸设备支持（手机拖动）
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (!isDrawingMode) return;
+
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const y = touch.clientY - rect.top;
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
-            const adjustedX = x * scaleX;
-            const adjustedY = y * scaleY;
+            const coords = { x: x * scaleX, y: y * scaleY };
+            
+            const endpoint = getClickedEndpoint(coords.x, coords.y);
+            
+            if (endpoint) {
+                isDragging = true;
+                dragTarget = endpoint;
+            } else if (currentPoints.length < 2) {
+                currentPoints.push(coords);
+                if (currentPoints.length === 1) {
+                    redrawCanvas();
+                } else if (currentPoints.length === 2) {
+                    redrawCanvas();
+                    labelInput.value = ''; // 清空输入框
+                    showLabelModal();
+                }
+            }
+        });
 
-            currentPoints.push({ x: adjustedX, y: adjustedY });
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (!isDrawingMode || !isDragging || !dragTarget) return;
 
-            if (currentPoints.length === 1) {
-                // 第一个点已标记
-                redrawCanvas();
-            } else if (currentPoints.length === 2) {
-                // 显示两个点和连线
-                redrawCanvas();
-                // 显示输入框
-                showLabelModal();
+            const touch = e.touches[0];
+            const coords = getAdjustedCoords(touch);
+            
+            const annotation = annotations[dragTarget.annotationIndex];
+            if (dragTarget.pointType === 'start') {
+                annotation.start.x = coords.x;
+                annotation.start.y = coords.y;
+            } else {
+                annotation.end.x = coords.x;
+                annotation.end.y = coords.y;
+            }
+            redrawCanvas();
+        });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (isDragging) {
+                isDragging = false;
+                dragTarget = null;
             }
         });
 
@@ -810,7 +1360,10 @@
                 item.className = 'annotation-item';
                 item.innerHTML = `
                     <span>${annotation.label}</span>
-                    <button class="btn btn-danger" onclick="deleteAnnotation(${index})">删除</button>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="editAnnotation(${index})">编辑</button>
+                        <button class="btn btn-danger" style="padding: 4px 8px; font-size: 12px;" onclick="deleteAnnotation(${index})">删除</button>
+                    </div>
                 `;
                 annotationList.appendChild(item);
             });
@@ -881,11 +1434,21 @@
                 originalImage = null;
                 annotations = [];
                 currentPoints = [];
-                canvas.classList.add('hidden');
+                canvasWrapper.classList.add('hidden');
                 actionButtons.classList.add('hidden');
+                zoomControls.classList.add('hidden');
+                keyboardHints.classList.add('hidden');
                 uploadZone.classList.remove('hidden');
                 hideLabelModal();
+                resetZoom();
                 updateAnnotationList();
+                
+                // 重置文件输入框，允许选择同一个文件
+                fileInput.value = '';
+                
+                // 重置画布
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                isDrawingMode = false;
             }
         }
     </script>
